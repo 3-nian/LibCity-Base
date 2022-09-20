@@ -1,8 +1,8 @@
 {
-    "n_layers": 3,
+    "n_layers": 2,
     "c_lt": 75,
 
-    "batch_size": 16,
+    "batch_size": 32,
     "scaler": "minmax11",
     "load_external": true,
     "normal_external": false,

@@ -6,6 +6,7 @@ from libcity.data.dataset.traffic_state_point_dataset import TrafficStatePointDa
 from libcity.data.dataset.traffic_state_grid_dataset import TrafficStateGridDataset
 from libcity.data.dataset.traffic_state_grid_od_dataset import TrafficStateGridOdDataset
 from libcity.data.dataset.traffic_state_od_dataset import TrafficStateOdDataset
+from libcity.data.dataset.traffic_state_cpt_od_dataset import TrafficStateCPTODDataset
 from libcity.data.dataset.eta_dataset import ETADataset
 from libcity.data.dataset.map_matching_dataset import MapMatchingDataset
 from libcity.data.dataset.roadnetwork_dataset import RoadNetWorkDataset
@@ -15,6 +16,7 @@ __all__ = [
     "TrajectoryDataset",
     "TrafficStateDataset",
     "TrafficStateCPTDataset",
+    "TrafficStateCPTODDataset",
     "TrafficStatePointDataset",
     "TrafficStateGridDataset",
     "TrafficStateOdDataset",

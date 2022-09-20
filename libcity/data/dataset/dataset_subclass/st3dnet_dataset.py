@@ -4,7 +4,7 @@ from libcity.data.dataset import TrafficStateCPTODDataset, TrafficStateGridOdDat
 from libcity.utils.dataset import timestamp2array, timestamp2vec_origin
 
 
-class STResNetDataset(TrafficStateGridOdDataset, TrafficStateCPTODDataset):
+class ST3DNetDataset(TrafficStateGridOdDataset, TrafficStateCPTODDataset):
     """
     STResNet外部数据源代码只用了ext_y, 没有用到ext_x!
     """
@@ -17,7 +17,7 @@ class STResNetDataset(TrafficStateGridOdDataset, TrafficStateCPTODDataset):
             + '_' + str(self.len_period) + '_' + str(self.len_trend) \
             + '_' + str(self.interval_period) + '_' + str(self.interval_trend)
         self.cache_file_name = os.path.join('./libcity/cache/dataset_cache/',
-                                            'grid_based_{}.npz'.format(self.parameters_str))
+                                            'grid_od_based_{}.npz'.format(self.parameters_str))
         self.pad_forward_period = 0
         self.pad_back_period = 0
         self.pad_forward_trend = 0

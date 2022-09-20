@@ -88,7 +88,7 @@
             "STResNetCommon", "ACFMCommon", "ASTGCNCommon", "MSTGCNCommon", "ToGCN", "CONVGCN", "STG2Seq",
             "DMVSTNet", "ATDM", "GMAN", "GTS", "STDN", "HGCN", "STSGCN", "STAGGCN", "STNN", "ResLSTM", "DGCN",
             "MultiSTGCnet", "STMGAT", "CRANN", "STTN", "CONVGCNCommon", "DSAN", "DKFN", "CCRNN", "MultiSTGCnetCommon",
-            "GEML", "FNN", "GSNet", "CSTN"
+            "GEML", "FNN", "GSNet", "CSTN", "CONVLSTM", "ST3DNet"
         ],
         "allowed_dataset": [
             "METR_LA", "PEMS_BAY", "PEMSD3", "PEMSD4", "PEMSD7", "PEMSD8", "PEMSD7(M)",
@@ -98,7 +98,7 @@
             "BEIJING_SUBWAY_10MIN", "BEIJING_SUBWAY_15MIN", "BEIJING_SUBWAY_30MIN",
             "ROTTERDAM", "HZMETRO", "SHMETRO", "M_DENSE", "PORTO", "NYCTAXI_DYNA",
             "NYCTAXI_OD", "NYCTAXI_GRID", "T_DRIVE_SMALL", "NYCBIKE", "AUSTINRIDE",
-            "BIKEDC", "BIKECHI", "NYC_RISK", "CHICAGO_RISK"
+            "BIKEDC", "BIKECHI", "NYC_RISK", "CHICAGO_RISK", "NYC_TOD"
         ],
         "DCRNN": {
             "dataset_class": "TrafficStatePointDataset",
@@ -337,6 +337,16 @@
         },
         "CSTN": {
             "dataset_class": "CSTNDataset",
+            "executor": "TrafficStateExecutor",
+            "evaluator": "TrafficStateEvaluator"
+        },
+        "CONVLSTM": {
+            "dataset_class": "CONVLSTMDataset",
+            "executor": "TrafficStateExecutor",
+            "evaluator": "TrafficStateEvaluator"
+        },
+        "ST3DNet": {
+            "dataset_class": "ST3DNetDataset",
             "executor": "TrafficStateExecutor",
             "evaluator": "TrafficStateEvaluator"
         }

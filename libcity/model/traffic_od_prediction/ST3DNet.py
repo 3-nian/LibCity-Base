@@ -30,6 +30,16 @@ class BnReluConv(nn.Module):
         return x
 
 
+class Reshape(nn.Module):
+
+    def __init__(self, *args):
+        super(Reshape, self).__init__()
+        self.shape = args
+
+    def forward(self, x):
+        return x.view((x.size(0),) + self.shape)
+
+
 class ResidualUnit(nn.Module):
     def __init__(self, nb_filter, bn=False):
         super(ResidualUnit, self).__init__()
@@ -64,7 +74,7 @@ class TrainableEltwiseLayer(nn.Module):
     # Matrix-based fusion
     def __init__(self, n, h, w, device):
         super(TrainableEltwiseLayer, self).__init__()
-        self.weights = nn.Parameter(torch.randn(1, n, h*w, h*w).to(device),
+        self.weights = nn.Parameter(torch.randn(1, h*w, h, w).to(device),
                                     requires_grad=True)  # define the trainable parameter
 
     def forward(self, x):
@@ -75,7 +85,7 @@ class TrainableEltwiseLayer(nn.Module):
         return x
 
 
-class STResNet(AbstractTrafficStateModel):
+class ST3DNet(AbstractTrafficStateModel):
     def __init__(self, config, data_feature):
         super().__init__(config, data_feature)
         self._scaler = self.data_feature.get('scaler')
@@ -86,9 +96,9 @@ class STResNet(AbstractTrafficStateModel):
         self.output_dim = self.data_feature.get('output_dim', 2)  # feature_dim = output_dim
         self.len_row = self.data_feature.get('len_row', 32)
         self.len_column = self.data_feature.get('len_column', 32)
-        self.len_closeness = self.data_feature.get('len_closeness', 4)
-        self.len_period = self.data_feature.get('len_period', 2)
-        self.len_trend = self.data_feature.get('len_trend', 0)
+        self.len_closeness = self.data_feature.get('len_closeness', 6)
+        self.len_period = self.data_feature.get('len_period', 0)
+        self.len_trend = self.data_feature.get('len_trend', 4)
         self._logger = getLogger()
 
         self.nb_residual_unit = config.get('nb_residual_unit', 12)
@@ -98,13 +108,13 @@ class STResNet(AbstractTrafficStateModel):
         self.tanh = torch.tanh
 
         if self.len_closeness > 0:
-            self.c_way = self.make_one_way(in_channels=self.len_closeness * self.feature_dim)
+            self.c_way = self.make_c_way(in_channels=self.len_row * self.len_column * 2)
 
-        if self.len_period > 0:
-            self.p_way = self.make_one_way(in_channels=self.len_period * self.feature_dim)
+        # if self.len_period > 0:
+        #     self.p_way = self.make_one_way(in_channels=self.len_period * self.feature_dim)
 
         if self.len_trend > 0:
-            self.t_way = self.make_one_way(in_channels=self.len_trend * self.feature_dim)
+            self.t_way = self.make_t_way(in_channels=self.len_row * self.len_column * 2)
 
         # Operations of external component
         if self.ext_dim > 0:
@@ -125,37 +135,76 @@ class STResNet(AbstractTrafficStateModel):
                                                   w=self.len_column, device=self.device))
         ]))
 
+    def make_c_way(self, in_channels):
+        return nn.Sequential(OrderedDict([
+            # input shape (b,2,t_c,h,w)
+            ("conv3d_1", nn.Conv3d(in_channels, 128, kernel_size=(5, 3, 3), stride=(1, 1, 1), padding=(2, 1, 1))),
+            ("relu3d_1", nn.ReLU()),
+            ("conv3d_2", nn.Conv3d(128, 64, kernel_size=(3, 3, 3), stride=(3, 1, 1), padding=(0, 1, 1))),
+            ("relu3d_2", nn.ReLU()),
+            ("conv3d_3", nn.Conv3d(64, 64, kernel_size=(3, 3, 3), stride=(3, 1, 1), padding=(1, 1, 1))),
+            ("reshape", Reshape(64, self.len_row, self.len_column)),
+            # ('conv1', conv3x3(in_channels=in_channels, out_channels=64)),
+            ('ResUnits', ResUnits(ResidualUnit, nb_filter=64, repetations=self.nb_residual_unit, bn=self.bn)),
+            ('relu', nn.ReLU()),
+            ('conv2d', conv3x3(in_channels=64, out_channels=self.len_row * self.len_column)),
+            ('FusionLayer', TrainableEltwiseLayer(n=self.output_dim, h=self.len_row,
+                                                  w=self.len_column, device=self.device))
+        ]))
+    def make_t_way(self, in_channels):
+        return nn.Sequential(OrderedDict([
+            ("conv3d", nn.Conv3d(in_channels, 64, kernel_size=(self.len_trend, 3, 3), padding=(0, 1, 1))),
+            ("relu3d", nn.ReLU()),
+            ("reshape", Reshape(64, self.len_row, self.len_column)),
+
+            # ('conv1', conv3x3(in_channels=in_channels, out_channels=64)),
+            ('ResUnits', ResUnits(ResidualUnit, nb_filter=64, repetations=self.nb_residual_unit, bn=self.bn)),
+            ('relu', nn.ReLU()),
+            ('conv2', conv3x3(in_channels=64, out_channels=self.len_row * self.len_column)),
+            ('FusionLayer', TrainableEltwiseLayer(n=self.output_dim, h=self.len_row,
+                                                  w=self.len_column, device=self.device))
+        ]))
+
     def forward(self, batch):
-        inputs = batch['X']  # (batch_size, T_c+T_p+T_t, len_row, len_column, feature_dim)
+        inputs = batch['X'][..., 0]  # (batch_size, T_c+T_p+T_t, len_row, len_column, feature_dim)
         input_ext = batch['y_ext']  # (batch_size, ext_dim)
-        batch_size, len_time, len_row, len_column, _, _, input_dim = inputs.shape
+        batch_size, len_time, len_row, len_column, _, _ = inputs.shape
         assert len_row == self.len_row
         assert len_column == self.len_column
         assert len_time == self.len_closeness + self.len_period + self.len_trend
-        assert input_dim == self.feature_dim
+        # assert input_dim == self.feature_dim
 
-        inputs = inputs.reshape((batch_size, len_time, len_row * len_column, len_row * len_column))
+        # ((B,T,H,W,H,W,1))
+        inputs_t = inputs.permute((0, 1, 4, 5, 2, 3))
+        inputs = inputs.reshape((batch_size, len_time, -1, len_row, len_column))
+        # x : (B, T, H * W, H, W)
+        inputs_t = inputs_t.reshape((batch_size, len_time, -1, len_row, len_column))
+        inputs = torch.cat([inputs, inputs_t], dim=2)
+        # x : (B, T, 2 * H * W, H, W)
+        inputs = inputs.permute((0, 2, 1, 3, 4))
+        # x : (B, 2 * H * W, T, H, W)
+
         # Three-way Convolution
         # parameter-matrix-based fusion
         main_output = 0
         if self.len_closeness > 0:
             begin_index = 0
             end_index = begin_index + self.len_closeness
-            input_c = inputs[:, begin_index:end_index, :, :]
+            input_c = inputs[:, :, begin_index:end_index, :]
             # input_c = input_c.view(-1, self.len_closeness * self.feature_dim, self.len_row, self.len_column)
             out_c = self.c_way(input_c)
             main_output += out_c
-        if self.len_period > 0:
-            begin_index = self.len_closeness
-            end_index = begin_index + self.len_period
-            input_p = inputs[:, begin_index:end_index, :, :]
-            # input_p = input_p.view(-1, self.len_period * self.feature_dim, self.len_row, self.len_column)
-            out_p = self.p_way(input_p)
-            main_output += out_p
+        # if self.len_period > 0:
+        #     begin_index = self.len_closeness
+        #     end_index = begin_index + self.len_period
+        #     input_p = inputs[:, :, begin_index:end_index, :]
+        #     # input_p = input_p.view(-1, self.len_period * self.feature_dim, self.len_row, self.len_column)
+        #     out_p = self.p_way(input_p)
+        #     main_output += out_p
         if self.len_trend > 0:
             begin_index = self.len_closeness + self.len_period
             end_index = begin_index + self.len_trend
-            input_t = inputs[:, begin_index:end_index, :, :]
+            input_t = inputs[:, :, begin_index:end_index, :]
             # input_t = input_t.view(-1, self.len_trend * self.feature_dim, self.len_row, self.len_column)
             out_t = self.t_way(input_t)
             main_output += out_t
@@ -164,8 +213,7 @@ class STResNet(AbstractTrafficStateModel):
         if self.ext_dim > 0:
             external_output = self.external_ops(input_ext)
             external_output = self.relu(external_output)
-            external_output = external_output.repeat(1, 1, self.len_row * self.len_column)
-            external_output = external_output.view(-1, self.feature_dim, self.len_row * self.len_column, self.len_row * self.len_column)
+            external_output = external_output.view(-1, self.feature_dim, self.len_row , self.len_column)
             main_output += external_output
         main_output = self.tanh(main_output)
         main_output = main_output.view(batch_size, 1, len_row, len_column, len_row, len_column, self.output_dim)
