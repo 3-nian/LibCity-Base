@@ -88,7 +88,7 @@
             "STResNetCommon", "ACFMCommon", "ASTGCNCommon", "MSTGCNCommon", "ToGCN", "CONVGCN", "STG2Seq",
             "DMVSTNet", "ATDM", "GMAN", "GTS", "STDN", "HGCN", "STSGCN", "STAGGCN", "STNN", "ResLSTM", "DGCN",
             "MultiSTGCnet", "STMGAT", "CRANN", "STTN", "CONVGCNCommon", "DSAN", "DKFN", "CCRNN", "MultiSTGCnetCommon",
-            "GEML", "FNN", "GSNet", "CSTN", "CONVLSTM", "ST3DNet"
+            "GEML", "FNN", "GSNet", "CSTN", "CONVLSTM", "ST3DNet", "MOMO"
         ],
         "allowed_dataset": [
             "METR_LA", "PEMS_BAY", "PEMSD3", "PEMSD4", "PEMSD7", "PEMSD8", "PEMSD7(M)",
@@ -321,7 +321,7 @@
             "evaluator": "TrafficStateEvaluator"
         },
         "GEML": {
-            "dataset_class": "TrafficStateOdDataset",
+            "dataset_class": "TrafficStateGridOdDataset",
             "executor": "GEMLExecutor",
             "evaluator": "TrafficStateEvaluator"
         },
@@ -348,6 +348,11 @@
         "ST3DNet": {
             "dataset_class": "ST3DNetDataset",
             "executor": "TrafficStateExecutor",
+            "evaluator": "TrafficStateEvaluator"
+        },
+        "MOMO": {
+            "dataset_class": "TrafficStateGridOdDataset",
+            "executor": "GEMLExecutor",
             "evaluator": "TrafficStateEvaluator"
         }
     },
