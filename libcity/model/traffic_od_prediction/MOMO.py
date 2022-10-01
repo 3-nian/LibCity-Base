@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from collections import OrderedDict
 from logging import getLogger
@@ -195,7 +196,7 @@ class ST3DCCBlock(nn.Module):
         output = self.conv_out(torch.cat([x, output], 1))
         # (B,C,T,N,N)
         # output = self.feed_forward(output + x)
-        return output
+        return F.relu(output + x)
 
 
 class MOMO(AbstractTrafficStateModel):
@@ -218,13 +219,13 @@ class MOMO(AbstractTrafficStateModel):
         self.bn = config.get('bn',False)
 
         dis_mx = self.data_feature.get('adj_mx')
-        self.conv3d_1 = nn.Sequential(nn.Conv3d(in_channels=1,out_channels=32,kernel_size=3,padding=1),
+        self.conv3d_1 = nn.Sequential(nn.Conv3d(in_channels=1,out_channels=16,kernel_size=3,padding=1),
                                       nn.ReLU(inplace=False),
-                                      # nn.Conv3d(in_channels=32,out_channels=64,kernel_size=3,stride=(2,1,1),padding=(0,1,1)),
-                                      # nn.ReLU(inplace=False)
+                                      nn.Conv3d(in_channels=16,out_channels=32,kernel_size=3,stride=(2,1,1),padding=(0,1,1)),
+                                      nn.ReLU(inplace=False)
                                       )
-        self.ST_Blocks = ST3DCCBlock(64, 64)
-        self.embed = nn.Sequential(nn.Conv2d(in_channels=self.input_window*64,out_channels=128,kernel_size=1),
+        self.ST_Blocks = ST3DCCBlock(32, 32)
+        self.embed = nn.Sequential(nn.Conv2d(in_channels=160, out_channels=128,kernel_size=1),
                                    nn.ReLU(inplace=False),
                                    nn.Conv2d(in_channels=128,out_channels=64,kernel_size=1),
                                    nn.ReLU(inplace=False))
@@ -251,7 +252,7 @@ class MOMO(AbstractTrafficStateModel):
         x = x.unsqueeze(1)
         x = self.conv3d_1(x)
         x = self.ST_Blocks(x)
-        x = x.reshape((-1,self.input_window*64,self.num_nodes,self.num_nodes))
+        x = x.reshape((x.shape[0], -1, self.num_nodes, self.num_nodes))
         x = self.embed(x)
         x = self.spablock(x)
         out = self.output(x)
