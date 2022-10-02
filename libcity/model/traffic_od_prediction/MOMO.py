@@ -61,6 +61,65 @@ class ResUnits(nn.Module):
         return x
 
 
+class CNN3D(nn.Module):
+    def __init__(self, height, width, input_window, h_num):
+        super(CNN3D, self).__init__()
+        self.height = height
+        self.width = width
+        self.h_num = h_num
+        self.input_window = input_window
+        self.input = nn.Conv3d(in_channels=self.height * self.width, out_channels=32, kernel_size=1)
+        self.relu = nn.ReLU()
+        self.out = nn.Conv3d(in_channels=32, out_channels=h_num, kernel_size=3, padding=1)
+
+    def forward(self, x):
+        # (B,T,N,N)
+        x = x.reshape((-1, self.height * self.width, self.input_window, self.height, self.width))
+        # (B,N,T,H,W)
+        x = self.input(x)
+        x = self.relu(x)
+        x = self.out(x)
+        x = self.relu(x)
+        # (B,h_num,T,H,W)
+        x = x.reshape((-1, self.h_num, self.input_window, self.height * self.width)).unsqueeze(-1)
+        # (B,h_num,T,N,1)
+        return x
+
+
+class ODEmbed(nn.Module):
+    def __init__(self, height, width, input_window, h_num):
+        super(ODEmbed, self).__init__()
+        self.height = height
+        self.width = width
+        self.h_num = h_num
+        self.input_window = input_window
+        self.O_CNN3D = CNN3D(self.height, self.width, self.input_window, self.h_num)
+        self.D_CNN3D = CNN3D(self.height, self.width, self.input_window, self.h_num)
+        self.conv_o = nn.Conv3d(in_channels=32 + self.h_num, out_channels=16, kernel_size=3, padding=1)
+        self.conv_d = nn.Conv3d(in_channels=32 + self.h_num, out_channels=16, kernel_size=3, padding=1)
+
+    def forward(self, x, xod):
+        # (B, T, N, N)
+        xo = self.O_CNN3D(x)
+        # xo:(B,h,T,N,1)
+        xo_t = xo.permute(0, 1, 2, 4, 3)
+        xd = x.permute(0, 1, 3, 2)
+        xd = self.D_CNN3D(xd)
+        # xd:(B,h,T,N,1)
+
+        xo = torch.matmul(xo, xd.permute(0, 1, 2, 4, 3))
+        # xo (B, h, T, N, N)
+        xd = torch.matmul(xd, xo_t)
+
+        xo = torch.cat([xo, xod], dim=1)
+        xo = self.conv_o(xo)
+        # xo (B, 16, T, N, N)
+        xd = torch.cat([xd, xod], dim=1)
+        xd = self.conv_d(xd)
+
+        return F.relu(torch.cat([xo, xd], dim=1))
+
+
 def INF3DH(B, H, W, D):
     return -torch.diag(torch.tensor(float("inf")).repeat(H), 0).unsqueeze(0).repeat(B * W * D, 1, 1)  # .cuda()
 
@@ -215,24 +274,28 @@ class MOMO(AbstractTrafficStateModel):
         self.loss_p0 = config.get('loss_p0', 0.5)
         self.loss_p1 = config.get('loss_p1', 0.25)
         self.loss_p2 = config.get('loss_p2', 0.25)
-        self.nb_residual_unit = config.get('nb_residual_unit',4)
-        self.bn = config.get('bn',False)
+        self.height = data_feature.get('len_row', 15)
+        self.width = data_feature.get('len_column', 5)
+        self.nb_residual_unit = config.get('nb_residual_unit', 4)
+        self.bn = config.get('bn', False)
+        self.h_num = config.get('h_num', 5)
 
         dis_mx = self.data_feature.get('adj_mx')
-        self.conv3d_1 = nn.Sequential(nn.Conv3d(in_channels=1,out_channels=16,kernel_size=3,padding=1),
+        self.conv3d_1 = nn.Sequential(nn.Conv3d(in_channels=1, out_channels=16, kernel_size=3, padding=1),
                                       nn.ReLU(inplace=False),
-                                      nn.Conv3d(in_channels=16,out_channels=32,kernel_size=3,padding=1),
+                                      nn.Conv3d(in_channels=16, out_channels=32, kernel_size=3, padding=1),
                                       nn.ReLU(inplace=False)
                                       )
+        self.od_embedding = ODEmbed(self.height, self.width, self.input_window, self.h_num)
         self.ST_Blocks = ST3DCCBlock(32, 32)
-        self.embed = nn.Sequential(nn.Conv2d(in_channels=self.input_window*32, out_channels=128,kernel_size=1),
+        self.embed = nn.Sequential(nn.Conv2d(in_channels=self.input_window * 32, out_channels=128, kernel_size=1),
                                    nn.ReLU(inplace=False),
-                                   nn.Conv2d(in_channels=128,out_channels=64,kernel_size=1),
+                                   nn.Conv2d(in_channels=128, out_channels=64, kernel_size=1),
                                    nn.ReLU(inplace=False))
         self.spablock = ResUnits(ResidualUnit, nb_filter=64, repetations=self.nb_residual_unit, bn=self.bn)
-        self.output = nn.Sequential(nn.Conv2d(64, 16,kernel_size=1),
+        self.output = nn.Sequential(nn.Conv2d(64, 16, kernel_size=1),
                                     nn.ReLU(inplace=False),
-                                    nn.Conv2d(16, self.output_dim,kernel_size=1))
+                                    nn.Conv2d(16, self.output_dim, kernel_size=1))
 
         # self.geo_adj = generate_geo_adj(dis_mx) \
         #     .repeat(self.batch_size * self.input_window, 1) \
@@ -249,9 +312,14 @@ class MOMO(AbstractTrafficStateModel):
     def forward(self, batch):
         x = batch['X'].squeeze(dim=-1)
         # (B, T, N, N)
-        x = x.unsqueeze(1)
-        x = self.conv3d_1(x)
-        x = self.ST_Blocks(x)
+        xod = x.unsqueeze(1)
+        # (B, 1, T, N, N)
+
+        xod = self.conv3d_1(xod)
+        # (B, 32, T, N, N)
+        x_ode = self.od_embedding(x, xod)
+
+        x = self.ST_Blocks(xod + x_ode)
         x = x.reshape((x.shape[0], -1, self.num_nodes, self.num_nodes))
         x = self.embed(x)
         x = self.spablock(x)
@@ -299,7 +367,6 @@ class MOMO(AbstractTrafficStateModel):
         # loss_out = loss.masked_mse_torch(y_out, y_out_true)
         # return self.loss_p0 * loss_pred + self.loss_p1 * loss_in + self.loss_p2 * loss_out
         return loss_pred
-
 
     def predict(self, batch):
         x = batch['X']  # (B, T, N, N, 1)
