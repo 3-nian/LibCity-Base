@@ -352,7 +352,7 @@
         },
         "MOMO": {
             "dataset_class": "TrafficStateGridOdDataset",
-            "executor": "GEMLExecutor",
+            "executor": "TrafficStateExecutor",
             "evaluator": "TrafficStateEvaluator"
         }
     },

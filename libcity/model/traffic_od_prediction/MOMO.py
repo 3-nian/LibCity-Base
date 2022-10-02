@@ -78,8 +78,8 @@ class CrissCrossAttention3D(nn.Module):
 
     def __init__(self, in_dim, verbose=False):
         super(CrissCrossAttention3D, self).__init__()
-        self.query_conv = nn.Conv3d(in_channels=in_dim, out_channels=in_dim // 8, kernel_size=1)
-        self.key_conv = nn.Conv3d(in_channels=in_dim, out_channels=in_dim // 8, kernel_size=1)
+        self.query_conv = nn.Conv3d(in_channels=in_dim, out_channels=in_dim // 4, kernel_size=1)
+        self.key_conv = nn.Conv3d(in_channels=in_dim, out_channels=in_dim // 4, kernel_size=1)
         self.value_conv = nn.Conv3d(in_channels=in_dim, out_channels=in_dim, kernel_size=1)
         self.softmax = nn.Softmax(dim=4)
         self.gamma = nn.Parameter(torch.zeros(1))
@@ -225,7 +225,7 @@ class MOMO(AbstractTrafficStateModel):
                                       nn.ReLU(inplace=False)
                                       )
         self.ST_Blocks = ST3DCCBlock(32, 32)
-        self.embed = nn.Sequential(nn.Conv2d(in_channels=160, out_channels=128,kernel_size=1),
+        self.embed = nn.Sequential(nn.Conv2d(in_channels=self.input_window*16, out_channels=128,kernel_size=1),
                                    nn.ReLU(inplace=False),
                                    nn.Conv2d(in_channels=128,out_channels=64,kernel_size=1),
                                    nn.ReLU(inplace=False))
