@@ -221,11 +221,11 @@ class MOMO(AbstractTrafficStateModel):
         dis_mx = self.data_feature.get('adj_mx')
         self.conv3d_1 = nn.Sequential(nn.Conv3d(in_channels=1,out_channels=16,kernel_size=3,padding=1),
                                       nn.ReLU(inplace=False),
-                                      nn.Conv3d(in_channels=16,out_channels=32,kernel_size=3,stride=(2,1,1),padding=(0,1,1)),
+                                      nn.Conv3d(in_channels=16,out_channels=32,kernel_size=3,padding=1),
                                       nn.ReLU(inplace=False)
                                       )
         self.ST_Blocks = ST3DCCBlock(32, 32)
-        self.embed = nn.Sequential(nn.Conv2d(in_channels=self.input_window*16, out_channels=128,kernel_size=1),
+        self.embed = nn.Sequential(nn.Conv2d(in_channels=self.input_window*32, out_channels=128,kernel_size=1),
                                    nn.ReLU(inplace=False),
                                    nn.Conv2d(in_channels=128,out_channels=64,kernel_size=1),
                                    nn.ReLU(inplace=False))
