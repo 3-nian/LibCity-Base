@@ -59,7 +59,18 @@ class ResUnits(nn.Module):
     def forward(self, x):
         x = self.stacked_resunits(x)
         return x
+class MLP(nn.Module):
+    def __init__(self):
+        super(MLP, self).__init__()
+        self.fc_1 = nn.Sequential(nn.Linear(in_features=29, out_features=32), nn.ReLU())
+        self.fc_2 = nn.Sequential(nn.Linear(in_features=32, out_features=16), nn.ReLU())
+        self.fc_3 = nn.Sequential(nn.Linear(in_features=16, out_features=8), nn.ReLU())
 
+    def forward(self, x):
+        x = self.fc_1(x)
+        x = self.fc_2(x)
+        x = self.fc_3(x)
+        return x
 
 class CNN3D(nn.Module):
     def __init__(self, height, width, input_window, h_num):
@@ -68,7 +79,8 @@ class CNN3D(nn.Module):
         self.width = width
         self.h_num = h_num
         self.input_window = input_window
-        self.input = nn.Conv3d(in_channels=self.height * self.width, out_channels=32, kernel_size=1)
+        # self.MLP = MLP()
+        self.input = nn.Conv3d(in_channels=self.height * self.width + 8, out_channels=32, kernel_size=1)
         self.relu = nn.ReLU()
         self.out = nn.Conv3d(in_channels=32, out_channels=h_num, kernel_size=3, padding=1)
 
@@ -76,6 +88,15 @@ class CNN3D(nn.Module):
         # (B,T,N,N)
         x = x.reshape((-1, self.height * self.width, self.input_window, self.height, self.width))
         # (B,N,T,H,W)
+
+
+        # w = self.MLP(w)
+        # # w : (B, T, 8)
+        # w = w.repeat(1, 1, self.height * self.width)
+        # w = w.reshape((self.batch_size, 8, self.input_window, self.height, self.width))
+        # # w : (B, 8, T, H, W)
+        # x = torch.cat([x, w], dim=1)
+
         x = self.input(x)
         x = self.relu(x)
         x = self.out(x)
@@ -312,6 +333,8 @@ class MOMO(AbstractTrafficStateModel):
     def forward(self, batch):
         x = batch['X'].squeeze(dim=-1)
         # (B, T, N, N)
+        # w = batch['W']
+        # w : (B, T, F)
         xod = x.unsqueeze(1)
         # (B, 1, T, N, N)
 
