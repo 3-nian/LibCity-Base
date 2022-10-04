@@ -80,7 +80,7 @@ class CNN3D(nn.Module):
         self.h_num = h_num
         self.input_window = input_window
         # self.MLP = MLP()
-        self.input = nn.Conv3d(in_channels=self.height * self.width + 8, out_channels=32, kernel_size=1)
+        self.input = nn.Conv3d(in_channels=self.height * self.width, out_channels=32, kernel_size=1)
         self.relu = nn.ReLU()
         self.out = nn.Conv3d(in_channels=32, out_channels=h_num, kernel_size=3, padding=1)
 
@@ -138,7 +138,28 @@ class ODEmbed(nn.Module):
         xd = torch.cat([xd, xod], dim=1)
         xd = self.conv_d(xd)
 
-        return F.relu(torch.cat([xo, xd], dim=1))
+        return F.relu(torch.cat([xo, xd], dim=1) + xod)
+
+
+class ODEmbed_1(nn.Module):
+    def __init__(self, height, width, input_window, h_num):
+        super(ODEmbed_1, self).__init__()
+        self.height = height
+        self.width = width
+        self.h_num = h_num
+        self.input_window = input_window
+        self.o_cnn = nn.Conv3d(in_channels=1,out_channels=16,kernel_size=3,padding=1)
+        self.d_cnn = nn.Conv3d(in_channels=1, out_channels=16, kernel_size=3, padding=1)
+
+    def forward(self,x,xod):
+        # (B, T, N, N)
+        xo = x.reshape((-1,1,self.input_window,self.height,self.width))
+        xo = self.o_cnn(xo)
+        # (B*N,16, T, H, W)
+        xd = x.permute(0,1,3,2).reshape((-1, 1, self.input_window, self.height, self.width))
+        xd = self.d_cnn(xd)
+
+        return F.relu(torch.cat([xo, xd], dim=1) + xod)
 
 
 def INF3DH(B, H, W, D):
@@ -340,9 +361,9 @@ class MOMO(AbstractTrafficStateModel):
 
         xod = self.conv3d_1(xod)
         # (B, 32, T, N, N)
-        x_ode = self.od_embedding(x, xod)
+        xod = self.od_embedding(x, xod)
 
-        x = self.ST_Blocks(xod + x_ode)
+        x = self.ST_Blocks(xod)
         x = x.reshape((x.shape[0], -1, self.num_nodes, self.num_nodes))
         x = self.embed(x)
         x = self.spablock(x)
