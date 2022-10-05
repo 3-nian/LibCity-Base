@@ -148,18 +148,23 @@ class ODEmbed_1(nn.Module):
         self.width = width
         self.h_num = h_num
         self.input_window = input_window
-        self.o_cnn = nn.Conv3d(in_channels=1,out_channels=16,kernel_size=3,padding=1)
-        self.d_cnn = nn.Conv3d(in_channels=1, out_channels=16, kernel_size=3, padding=1)
-
+        self.o_cnn = nn.Sequential(nn.Conv3d(in_channels=1,out_channels=8,kernel_size=3,padding=1),
+                                   nn.ReLU(),
+                                   nn.Conv3d(in_channels=8,out_channels=32,kernel_size=3,padding=1))
+        self.d_cnn = nn.Sequential(nn.Conv3d(in_channels=1,out_channels=8,kernel_size=3,padding=1),
+                                   nn.ReLU(),
+                                   nn.Conv3d(in_channels=8,out_channels=32,kernel_size=3,padding=1))
     def forward(self,x,xod):
         # (B, T, N, N)
         xo = x.reshape((-1,1,self.input_window,self.height,self.width))
         xo = self.o_cnn(xo)
         # (B*N,16, T, H, W)
+        xo = xo.reshape((-1,32,self.input_window,self.height*self.width,self.height*self.width))
         xd = x.permute(0,1,3,2).reshape((-1, 1, self.input_window, self.height, self.width))
         xd = self.d_cnn(xd)
+        xd = xd.reshape((-1, 32, self.input_window, self.height * self.width, self.height * self.width))
 
-        return F.relu(torch.cat([xo, xd], dim=1) + xod)
+        return F.relu(xo + xd + xod)
 
 
 def INF3DH(B, H, W, D):
@@ -328,7 +333,7 @@ class MOMO(AbstractTrafficStateModel):
                                       nn.Conv3d(in_channels=16, out_channels=32, kernel_size=3, padding=1),
                                       nn.ReLU(inplace=False)
                                       )
-        self.od_embedding = ODEmbed(self.height, self.width, self.input_window, self.h_num)
+        self.od_embedding = ODEmbed_1(self.height, self.width, self.input_window, self.h_num)
         self.ST_Blocks = ST3DCCBlock(32, 32)
         self.embed = nn.Sequential(nn.Conv2d(in_channels=self.input_window * 32, out_channels=128, kernel_size=1),
                                    nn.ReLU(inplace=False),
