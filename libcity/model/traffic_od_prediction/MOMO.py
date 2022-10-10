@@ -148,23 +148,18 @@ class ODEmbed_1(nn.Module):
         self.width = width
         self.h_num = h_num
         self.input_window = input_window
-        self.o_cnn = nn.Sequential(nn.Conv3d(in_channels=1,out_channels=8,kernel_size=3,padding=1),
-                                   nn.ReLU(),
-                                   nn.Conv3d(in_channels=8,out_channels=32,kernel_size=3,padding=1))
-        self.d_cnn = nn.Sequential(nn.Conv3d(in_channels=1,out_channels=8,kernel_size=3,padding=1),
-                                   nn.ReLU(),
-                                   nn.Conv3d(in_channels=8,out_channels=32,kernel_size=3,padding=1))
+        self.o_cnn = nn.Conv3d(in_channels=1, out_channels=16, kernel_size=3, padding=1)
+        self.d_cnn = nn.Conv3d(in_channels=1, out_channels=16, kernel_size=3, padding=1)
+
     def forward(self,x,xod):
         # (B, T, N, N)
-        xo = x.reshape((-1,1,self.input_window,self.height,self.width))
+        xo = x.reshape((-1, 1, self.input_window, self.height, self.width))
         xo = self.o_cnn(xo)
         # (B*N,16, T, H, W)
-        xo = xo.reshape((-1,32,self.input_window,self.height*self.width,self.height*self.width))
-        xd = x.permute(0,1,3,2).reshape((-1, 1, self.input_window, self.height, self.width))
+        xd = x.permute(0, 1, 3, 2).reshape((-1, 1, self.input_window, self.height, self.width))
         xd = self.d_cnn(xd)
-        xd = xd.reshape((-1, 32, self.input_window, self.height * self.width, self.height * self.width))
 
-        return F.relu(xo + xd + xod)
+        return F.relu(torch.cat([xo, xd], dim=1) + xod)
 
 
 def INF3DH(B, H, W, D):
@@ -339,7 +334,7 @@ class MOMO(AbstractTrafficStateModel):
                                    nn.ReLU(inplace=False),
                                    nn.Conv2d(in_channels=128, out_channels=64, kernel_size=3,padding=1),
                                    nn.ReLU(inplace=False))
-        self.spablock = ResUnits(ResidualUnit, nb_filter=64, repetations=self.nb_residual_unit, bn=self.bn)
+        # self.spablock = ResUnits(ResidualUnit, nb_filter=64, repetations=self.nb_residual_unit, bn=self.bn)
         self.output = nn.Sequential(nn.Conv2d(64, 16, kernel_size=1),
                                     nn.ReLU(inplace=False),
                                     nn.Conv2d(16, self.output_dim, kernel_size=1))
@@ -371,7 +366,7 @@ class MOMO(AbstractTrafficStateModel):
         x = self.ST_Blocks(xod)
         x = x.reshape((x.shape[0], -1, self.num_nodes, self.num_nodes))
         x = self.embed(x)
-        x = self.spablock(x)
+        # x = self.spablock(x)
         out = self.output(x)
         out = out.unsqueeze(dim=-1)
         # x_ge_embed = self.GCN(x, self.geo_adj[:x.shape[0], ...])
